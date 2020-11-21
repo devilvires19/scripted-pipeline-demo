@@ -1,0 +1,31 @@
+node{
+     stage("Pull Source code from GITHUB Repositary"){
+         git "https://github.com/devilvires19/cloudknowledge.git"
+     }
+     stage("Build Docker file"){
+      sh 'docker image build -t $JOB_NAME:v1.$BUILD_ID .'
+      sh 'docker image tag $JOB_NAME:v1.$BUILD_ID <docker_hub_id>/$JOB_NAME:v1.$BUILD_ID'
+      sh 'docker image tag $JOB_NAME:v1.$BUILD_ID <docker_hub_id>/$JOB_NAME:latest'
+     }
+     stage("Push Image To Docker hub"){
+         withCredentials([string(credentialsId: 'dockerhubpassword', variable: 'dockerhubpassword')]){
+          sh 'docker login -u <docker_hub_id> -p $(dockerhubpassword)'
+          sh 'docker image push <docker_hub_id>/$JOB_NAME:v1.$BUILD_ID'
+          sh 'docker image push <docker_hub_id>/$JOB_NAME:latest'
+          sh 'docker image rmi $JOB_NAME:v1.$BUILD_ID <docker_hub_id>/$JOB_NAME:v1.$BUILD_ID <docker_hub_id>/$JOB_NAME:latest'
+         }
+     }
+     stage("Deployment of Docker Container"){
+      def dockerRun = 'docker run -p 8000:80 -d --name cloudknowledges <docker_hub_id>/<jenkins-job-name>:latest'
+      def dockerRm = 'docker Container rm -f cloudknowledges'
+      def dockerImageRm = 'docker image rmi <docker_hub_id>/<jenkins-job-name>'
+        sshagent(['dockerhostpassword']){
+          ##add ssh-key to that jenkins "pipline syntax generator"
+          ##for github triggreing add github-webhook
+          sh 'ssh -o StrictHostKeyChecking=no ec2-user@<docker-host-private-ip> $(dockerRm)'
+          sh 'ssh -o StrictHostKeyChecking=no ec2-user@<docker-host-private-ip> $(dockerImageRm)'
+           sh 'ssh -o StrictHostKeyChecking=no ec2-user@<docker-host-private-ip> $(dockerRun)'
+        }
+
+     }
+} 
